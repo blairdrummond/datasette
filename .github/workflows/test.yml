@@ -63,8 +63,7 @@ jobs:
           --file Dockerfile . \
           --tag $REPO:${COMMIT_SHA} \
           --build-arg VERSION=${COMMIT_SHA} \
-          --platform ${{ matrix.platform }} \
-          --push
+          --platform ${{ matrix.platform }}
         echo "::set-output name=image_name::$REPO:${COMMIT_SHA}"
       env:
         COMMIT_SHA: ${{ github.sha }}
