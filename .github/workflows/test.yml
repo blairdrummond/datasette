@@ -42,12 +42,7 @@ jobs:
           - linux/arm64
           - linux/ppc64le
           - linux/s390x
-    services:
-      # Create a docker registry inside the github action
-      registry:
-        image: registry:2
-        ports:
-          - 5000:5000
+
     steps:
     - uses: actions/checkout@v2
 
@@ -66,14 +61,14 @@ jobs:
       run: |
         docker buildx build \
           --file Dockerfile . \
-          --tag $REPO:${VERSION_TAG} \
-          --build-arg VERSION=${VERSION_TAG} \
+          --tag $REPO:${COMMIT_SHA} \
+          --build-arg VERSION=${COMMIT_SHA} \
           --platform ${{ matrix.platform }} \
           --push
-          echo "::set-output name=image_name::$REPO:${VERSION_TAG}" && \
+        echo "::set-output name=image_name::$REPO:${COMMIT_SHA}"
       env:
-        VERSION_TAG: ${{ github.sha }}
-        REPO: localhost:5000/datasetteproject/datasette
+        COMMIT_SHA: ${{ github.sha }}
+        REPO: datasetteproject/datasette
 
     - name: Test Docker image
       run: |
@@ -87,10 +82,6 @@ jobs:
               "pytest-timeout>=1.4.2,<1.5" \
               "trustme>=0.7,<0.8" \
               && cd /mnt && pytest'
-
-
-    # Remove the image locally (trivy works better this way)
-    - run: docker rmi -f $(docker image ls -aq) || true
 
     # Scan image for vulnerabilities
     - uses: Azure/container-scan@v0
