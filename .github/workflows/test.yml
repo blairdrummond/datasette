@@ -28,3 +28,73 @@ jobs:
       run: |
         pytest -n auto -m "not serial"
         pytest -m "serial"
+
+  test-docker:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/386
+          - linux/amd64
+          - linux/arm/v6
+          - linux/arm/v7
+          - linux/arm64
+          - linux/ppc64le
+          - linux/s390x
+    services:
+      # Create a docker registry inside the github action
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+
+    - name: Set up Docker Buildx
+      id: buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Available platforms
+      run: echo ${{ steps.buildx.outputs.platforms }}
+
+    - name: Build and push to Local registry
+      id: build-image
+      run: |
+        docker buildx build \
+          --file Dockerfile . \
+          --tag $REPO:${VERSION_TAG} \
+          --build-arg VERSION=${VERSION_TAG} \
+          --platform ${{ matrix.platform }} \
+          --push
+          echo "::set-output name=image_name::$REPO:${VERSION_TAG}" && \
+      env:
+        VERSION_TAG: ${{ github.sha }}
+        REPO: localhost:5000/datasetteproject/datasette
+
+    - name: Test Docker image
+      run: |
+        docker run -v `pwd`:/mnt --platform ${{ matrix.platform }} \
+            ${{ steps.build-image.outputs.image_name }} bash -c '
+              pip install "pytest>=5.2.2,<6.3.0" \
+              "pytest-xdist>=2.2.1,<2.3" \
+              "pytest-asyncio>=0.10,<0.16" \
+              "beautifulsoup4>=4.8.1,<4.10.0" \
+              "black==21.5b1" \
+              "pytest-timeout>=1.4.2,<1.5" \
+              "trustme>=0.7,<0.8" \
+              && cd /mnt && pytest'
+
+
+    # Remove the image locally (trivy works better this way)
+    - run: docker rmi -f $(docker image ls -aq) || true
+
+    # Scan image for vulnerabilities
+    - uses: Azure/container-scan@v0
+      with:
+        image-name: ${{ steps.build-image.outputs.image_name }}
+        severity-threshold: CRITICAL
+        run-quality-checks: false
